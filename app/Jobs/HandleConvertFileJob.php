@@ -68,7 +68,7 @@ class HandleConvertFileJob implements ShouldQueue
         $where .= " and (layer ilike " . join(" or layer ilike ", $this->options['layers']) . ")";
         $where .= "\"";
         $cmd .= " " . $where;
-        $cmd .= " -s_srs EPSG:6991 -t_srs {$this->options['srs']}";
+        $cmd .= " -s_srs {$this->data->srs} -t_srs {$this->options['srs']}";
         if ($this->options['output_type'] == OutputType::SHAPEFILE) {
             $cmd .= " -f \"ESRI Shapefile\" -skipfailures";
         } else {

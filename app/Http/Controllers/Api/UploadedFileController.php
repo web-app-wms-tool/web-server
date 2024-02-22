@@ -39,6 +39,7 @@ class UploadedFileController extends Controller
     {
         $request->validate([
             'file.*' => 'mimetypes:application/octet-stream',
+            'srs' => 'required',
         ]);
         $file = $request->file('file');
 
@@ -57,6 +58,7 @@ class UploadedFileController extends Controller
             'name' => $file->getClientOriginalName(),
             'path' => $disk->path($relative_file_path),
             'dxf_path' => $disk->path($relative_file_path),
+            'srs' => $request->get('srs'),
             'size' => $disk->size($relative_file_path),
             'uuid' => $uuid,
         ]);

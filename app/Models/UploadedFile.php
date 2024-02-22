@@ -20,6 +20,7 @@ class UploadedFile extends Model
         'task_id',
         'is_read_done',
         'metadata',
+        'srs',
     ];
     protected $casts = [
         'metadata' => 'array',

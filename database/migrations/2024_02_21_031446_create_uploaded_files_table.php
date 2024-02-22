@@ -16,7 +16,8 @@ return new class extends Migration
             $table->string('name');
             $table->string('path');
             $table->string('dxf_path')->nullable();
-            $table->unsignedInteger('size')->nullable();
+            $table->unsignedBigInteger('size')->nullable();
+            $table->string('srs');
             $table->string('uuid')->unique();
             $table->boolean('is_read_done')->default(0);
             $table->json('metadata')->nullable()->default('{}');
