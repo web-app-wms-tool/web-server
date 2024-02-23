@@ -2,26 +2,18 @@
 
 namespace App\Jobs;
 
-use App\Constants\TaskStatus;
 use App\Models\Task;
 use App\Models\UploadedFile;
-use Carbon\Carbon;
 use File;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
 use Process;
 use proj4php\Point;
 use proj4php\Proj4php;
 use proj4php\Proj;
 use Storage;
 
-class HandleReadFileJob implements ShouldQueue
+class HandleReadFileJob extends AJob
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-
+    protected $type = 'READ_FILE';
     public $timeout = 0;
     /**
      * Create a new job instance.
@@ -29,10 +21,10 @@ class HandleReadFileJob implements ShouldQueue
 
     protected $data;
     protected $task;
-    public function __construct(UploadedFile $data, Task $task)
+    public function __construct(Task $task, UploadedFile $data)
     {
+        parent::__construct($task);
         $this->data = $data;
-        $this->task = $task;
     }
 
     /**
@@ -40,57 +32,66 @@ class HandleReadFileJob implements ShouldQueue
      */
     public function handle(): void
     {
-        $this->task->start_at = Carbon::now();
-        $this->task->status = TaskStatus::PROCESSING;
-        $this->task->save();
+        $this->cb_handle(function ($cb_show) {
+            $file_extension = File::extension($this->data->path);
 
-        $file_extension = File::extension($this->data->path);
+            $disk = Storage::disk('public');
+            if ($file_extension == "dwg") {
+                $cb_show("Convert {$this->data->name} to dxf start");
+                $dxf_path = $this->convertDWG2DXF($disk->path('files/upload/' . $this->data->uuid));
+                $this->data->dxf_path = $dxf_path;
+                $cb_show("Convert {$this->data->name} to dxf start done");
+            }
 
-        $disk = Storage::disk('public');
-        if ($file_extension == "dwg") {
-            $dxf_path = $this->convertDWG2DXF($disk->path('files/upload/' . $this->data->uuid));
-            $this->data->dxf_path = $dxf_path;
-        }
+            $cb_show("Reading {$this->data->name} information start");
 
-        $extent = $this->getExtent($this->data->dxf_path);
-        $layers = $this->getLayers($this->data->dxf_path);
-        $geometry_types = $this->getGeometryType($this->data->dxf_path);
-        $this->data->is_read_done = 1;
+            $extent = $this->getExtent($this->data->dxf_path);
+            $cb_show("Reading bounding box done");
 
-        $proj4 = new Proj4php();
+            $layers = $this->getLayers($this->data->dxf_path);
+            $cb_show("Reading all layers done");
 
-        $s_proj4 = new Proj($this->data->srs, $proj4);
-        $t_proj4 = new Proj("EPSG:6991", $proj4);
+            $geometry_types = $this->getGeometryType($this->data->dxf_path);
+            $cb_show("Reading all geometry types done");
 
-        $s_min_point = new Point($extent[0], $extent[1], $s_proj4);
-        $t_min_point = $proj4->transform($t_proj4, $s_min_point);
+            $cb_show("Reading {$this->data->name} information done");
 
-        $s_max_point = new Point($extent[2], $extent[3], $s_proj4);
-        $t_max_point = $proj4->transform($t_proj4, $s_max_point);
+            if ($this->data->srs != "EPSG:6991") {
+                $cb_show("Convert bounding box's in {$this->data->srs} to EPSG:6991 start");
 
-        $this->data->metadata = [
-            "bbox" => [
-                $t_min_point->__get("x"),
-                $t_min_point->__get("y"),
-                $t_max_point->__get("x"),
-                $t_max_point->__get("y"),
-            ],
-            'layers' => $layers,
-            'geometry_types' => $geometry_types,
-        ];
-        $this->data->save();
+                $proj4 = new Proj4php();
 
-        $this->task->status = TaskStatus::COMPLETED;
-        $this->task->end_at = Carbon::now();
-        $this->task->save();
+                $s_proj4 = new Proj($this->data->srs, $proj4);
+                $t_proj4 = new Proj("EPSG:6991", $proj4);
 
+                $s_min_point = new Point($extent[0], $extent[1], $s_proj4);
+                $t_min_point = $proj4->transform($t_proj4, $s_min_point);
+
+                $s_max_point = new Point($extent[2], $extent[3], $s_proj4);
+                $t_max_point = $proj4->transform($t_proj4, $s_max_point);
+
+                $cb_show("Convert bounding box's in {$this->data->srs} to EPSG:6991 done");
+            }
+
+            $this->data->metadata = [
+                "bbox" => [
+                    $t_min_point->x ?? $extent[0],
+                    $t_min_point->y ?? $extent[1],
+                    $t_max_point->x ?? $extent[2],
+                    $t_max_point->y ?? $extent[3],
+                ],
+                'layers' => $layers,
+                'geometry_types' => $geometry_types,
+            ];
+            $this->data->is_read_done = 1;
+            $this->data->save();
+            $cb_show("Reading file {$this->data->name} done");
+        });
     }
-    public function failed(\Exception $exception): void
+
+    public function failed(\Exception $exception)
     {
-        $this->task->status = TaskStatus::FAILED;
-        $this->task->error = $exception->getMessage();
-        $this->task->end_at = Carbon::now();
-        $this->task->save();
+        $this->cb_failed($exception);
     }
 
     private function getExtent(string $file_path): array

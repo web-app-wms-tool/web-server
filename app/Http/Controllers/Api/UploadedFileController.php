@@ -27,9 +27,9 @@ class UploadedFileController extends Controller
         $query = QueryBuilder::for($query, $request)
             ->allowedAgGrid([])
             ->defaultSorts(['-id'])
+            ->allowedIncludes(['task'])
             ->allowedPagination();
         return response()->json(new \App\Http\Resources\Items($query->get()), 200, []);
-
     }
 
     /**
@@ -71,7 +71,7 @@ class UploadedFileController extends Controller
         $data->task_id = $task->id;
         $data->save();
 
-        HandleReadFileJob::dispatch($data, $task);
+        HandleReadFileJob::dispatch($task, $data);
 
         return $this->responseCreated($data);
     }
@@ -85,7 +85,7 @@ class UploadedFileController extends Controller
             'task_type' => TaskType::CONVERTING,
         ]);
 
-        HandleConvertFileJob::dispatch($data, $task, $request->all());
+        HandleConvertFileJob::dispatch($task, $data, $request->all());
         return $this->responseCreated($task);
     }
 

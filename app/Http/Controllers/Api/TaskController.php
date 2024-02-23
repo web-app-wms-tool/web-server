@@ -3,54 +3,32 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Library\QueryBuilder\QueryBuilder;
+use App\Models\Task;
+use App\Traits\ResponseType;
 use Illuminate\Http\Request;
 
 class TaskController extends Controller
 {
+    use ResponseType;
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function indexAgGrid(Request $request)
     {
-        //
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        //
+        $query = Task::query();
+        $query = QueryBuilder::for($query, $request)
+            ->allowedAgGrid([])
+            ->allowedIncludes(['uploaded_file', 'converted_file'])
+            ->defaultSorts(['-id'])
+            ->allowedPagination();
+        return response()->json(new \App\Http\Resources\Items($query->get()), 200, []);
     }
 
     /**
      * Display the specified resource.
      */
     public function show(string $id)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
     {
         //
     }

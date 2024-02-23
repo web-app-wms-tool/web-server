@@ -19,6 +19,10 @@ return new class extends Migration
                 ->nullable()
                 ->constrained('tasks')
                 ->onDelete('cascade');
+            $table->foreignId('uploaded_file_id')
+                ->nullable()
+                ->constrained('uploaded_files')
+                ->onDelete('set null');
             $table->timestamps();
         });
     }

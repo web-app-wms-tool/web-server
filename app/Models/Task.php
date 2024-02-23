@@ -22,26 +22,8 @@ class Task extends Model
         'start_at' => 'datetime',
         'end_at' => 'datetime',
     ];
-    protected $appends = [
-        'status_full_text',
-    ];
-    public function getStatusFullTextAttribute()
+    public function uploadedFile()
     {
-        switch ($this->status) {
-            case 0:
-                return 'Created';
-            case 1:
-                return 'Processing';
-            case 2:
-                return 'Completed';
-            case 3:
-                return 'Failed';
-            default:
-                return;
-        }
-    }
-    public function convertedFile()
-    {
-        return $this->hasOne(ConvertedFile::class);
+        return $this->hasOne(UploadedFile::class);
     }
 }
