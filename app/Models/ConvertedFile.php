@@ -10,8 +10,9 @@ class ConvertedFile extends Model
     use HasFactory;
     protected $table = 'converted_files';
     protected $fillable = [
-        'name',
-        'path',
+        'layer_name',
+        'geoserver_ref',
+        'uuid',
         'task_id',
     ];
     public function task()

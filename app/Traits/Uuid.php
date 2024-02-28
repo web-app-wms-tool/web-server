@@ -4,12 +4,11 @@ namespace App\Traits;
 
 use Illuminate\Support\Str;
 
-
 trait Uuid
 {
     public static function generateUuid()
     {
-        return Str::uuid();
+        return Str::uuid()->getHex();
     }
 
     protected static function bootUuid()

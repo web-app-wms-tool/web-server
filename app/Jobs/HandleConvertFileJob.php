@@ -2,19 +2,17 @@
 
 namespace App\Jobs;
 
-use App\Constants\OutputType;
-use App\Helpers\ZipHelper;
 use App\Models\ConvertedFile;
 use App\Models\Task;
 use App\Models\UploadedFile;
+use App\Traits\GeoserverTrait;
 use App\Traits\Uuid;
-use File;
+use DB;
 use Process;
-use Storage;
-use ZipArchive;
 
 class HandleConvertFileJob extends AJob
 {
+    use GeoserverTrait;
     protected $type = 'CONVERT_FILE';
     public $timeout = 0;
     /**
@@ -24,6 +22,7 @@ class HandleConvertFileJob extends AJob
     protected $task;
     protected $options;
     protected $uuid;
+    protected $db_config;
     public function __construct(Task $task, UploadedFile $data, $options)
     {
         parent::__construct($task);
@@ -36,6 +35,7 @@ class HandleConvertFileJob extends AJob
         $this->options['layers'] = array_map(function ($item) {
             return "'$item'";
         }, $this->options['layers']);
+        $this->db_config = DB::connection("pgsql-import")->getConfig();
     }
 
     /**
@@ -44,15 +44,51 @@ class HandleConvertFileJob extends AJob
     public function handle(): void
     {
         $this->cb_handle(function ($cb_show) {
-            $cb_show("Convert {$this->data->name} to {$this->options['output_type']} start");
+            $cb_show("Import {$this->data->name} into GeoServer as Postgis Database start");
             $uuid = $this->uuid;
-            $disk = Storage::disk('public');
-            $relative_folder_path = "files/convert/$uuid";
-            if (!$disk->exists($relative_folder_path)) {
-                $disk->makeDirectory("$relative_folder_path"); //creates directory
-                $cb_show("Create folder {$disk->path($relative_folder_path)}");
+
+            $workspace = [
+                'default' => false,
+                'name' => config('app.geoserver.workspace'),
+            ];
+            $response = $this->getGeoserverData("workspaces" . "/{$workspace['name']}");
+            if ($response->failed()) {
+                $this->postGeoserverData("workspaces", ['workspace' => $workspace]);
+                $cb_show("Create workspace {$workspace['name']} done");
             }
-            $name = pathinfo($this->data->path, PATHINFO_FILENAME);
+
+            $db_name = $this->db_config["database"];
+            $username = $this->db_config["username"];
+            $host = $this->db_config["host"];
+            $port = $this->db_config["port"];
+            $password = $this->db_config["password"];
+            $schema = $this->db_config["schema"];
+
+            $workspace_name = !empty($workspace['name']) ? $workspace['name'] : config('app.geoserver.workspace');
+            $url_datastore = "workspaces/$workspace_name/datastores";
+            $repsonse = $this->getGeoserverData($url_datastore . "/$schema");
+            if ($repsonse->failed()) {
+                $payload = [
+                    "dataStore" => [
+                        "name" => $schema,
+                        "connectionParameters" => [
+                            "entry" => [
+                                ["@key" => "host", "$" => $host],
+                                ["@key" => "port", "$" => $port],
+                                ["@key" => "database", "$" => $db_name],
+                                ["@key" => "schema", "$" => $schema],
+                                ["@key" => "user", "$" => $username],
+                                ["@key" => "passwd", "$" => $password],
+                                ["@key" => "dbtype", "$" => "postgis"],
+                            ],
+                        ],
+                    ],
+                ];
+                $this->postGeoserverData($url_datastore, $payload);
+                $cb_show("Create DataStore {$schema} done");
+            }
+
+            $cb_show("Import {$this->data->name} into PostgreSQL start");
 
             $cmd = config('tool.ogr2ogr_path');
             $cmd .= " -sql \"select * from entities";
@@ -61,71 +97,45 @@ class HandleConvertFileJob extends AJob
             $where .= "\"";
             $cmd .= " " . $where;
             $cmd .= " -s_srs {$this->data->srs} -t_srs {$this->options['srs']}";
-            if ($this->options['output_type'] == OutputType::SHAPEFILE) {
-                $cmd .= " -f \"ESRI Shapefile\" -skipfailures";
-            } else {
-                $cmd .= " -f {$this->options['output_type']}";
-            }
-            $file_path = "{$disk->path($relative_folder_path)}/{$name}.{$this->options['output_type']}";
-            $cmd .= " $file_path";
+            $cmd .= " -f \"PostgreSQL\" PG:\"host=$host port=$port user=$username password=$password dbname=$db_name\"";
+            $cmd .= " -lco SCHEMA=\"import\" -nln $uuid -append";
             $cmd .= " {$this->data->dxf_path}";
 
             $process = Process::run($cmd);
             $output = $process->output();
-            if ($process->failed() && $this->options['output_type'] != OutputType::SHAPEFILE) {
+            if ($process->failed()) {
                 if (empty($output)) {
-                    $type = ucfirst(strtolower($this->options['output_type']));
-                    $output = "Can not convert {$this->data->name} to $type";
+                    $output = "Can not import {$this->data->name} into PostgreSQL done";
                 }
                 throw new \Exception($output);
             }
+            $cb_show("Import {$this->data->name} into PostgreSQL done");
 
-            if ($this->options['output_type'] == OutputType::SHAPEFILE) {
-                if (empty($disk->files("files/convert/{$uuid}"))) {
-                    throw new \Exception("Can not convert {$this->data->name} to Shapefile");
-                }
-                $cb_show("Zipping all shapefile start");
-                $file_path = $this->zipShapefile($disk->path("files/convert/{$uuid}"), $name);
-                $cb_show("Zipping all shapefile done");
-            }
+            $cb_show("Publish layer {$db_name}:{$uuid} start");
+            $url_featuretypes = "workspaces/$workspace_name/datastores/$schema/featuretypes";
+            $response = $this->postGeoserverData($url_featuretypes, ['featureType' => ['name' => $uuid]]);
+            $cb_show("Publish layer {$db_name}:{$uuid} done");
 
             ConvertedFile::create([
-                'name' => basename($file_path),
-                'path' => $file_path,
+                'layer_name' => "$db_name:$uuid",
+                'geoserver_ref' => '',
+                'uuid' => $uuid,
                 'task_id' => $this->task->id,
             ]);
-            $cb_show("Convert {$this->data->name} to {$this->options['output_type']} done");
+            $cb_show("Import {$this->data->name} into GeoServer as Postgis Database done");
         });
     }
 
     public function failed(\Exception $exception): void
     {
-        $this->cb_failed($exception, function ($cb_show) {
-            $disk = Storage::disk('public');
-            $relative_folder_path = "files/convert/{$this->uuid}";
-            if ($disk->exists($relative_folder_path)) {
-                $disk->deleteDirectory("$relative_folder_path");
-                $cb_show("Delete folder $relative_folder_path");
+        $schema = $this->db_config['schema'];
+        $uuid = $this->uuid;
+        $this->cb_failed($exception, function ($cb_show) use ($schema, $uuid) {
+            DB::statement("DROP TABLE IF EXISTS \"$schema\".\"$uuid\" CASCADE;");
+            $converted_file = ConvertedFile::where('uuid', $uuid)->first();
+            if (!empty($converted_file)) {
+                $converted_file->delete();
             }
         });
-    }
-
-    public function zipShapefile(string $folder_path, string $name): string
-    {
-        $old_files = File::files($folder_path);
-
-        $zip = new ZipArchive();
-        $file_path = $folder_path . '/' . "$name.zip";
-        if ($zip->open($file_path, ZipArchive::CREATE) !== true) {
-            throw new \RuntimeException('Cannot open ' . $file_path);
-        }
-        ZipHelper::addContent($zip, $folder_path);
-        $zip->close();
-
-        foreach ($old_files as $file) {
-            File::delete($file->getRealPath());
-        }
-
-        return $file_path;
     }
 }

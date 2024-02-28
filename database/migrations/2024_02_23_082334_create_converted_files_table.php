@@ -13,8 +13,9 @@ return new class extends Migration
     {
         Schema::create('converted_files', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->string('path')->nullable();
+            $table->string('layer_name');
+            $table->string('geoserver_ref');
+            $table->string('uuid')->unique();
             $table->foreignId('task_id')
                 ->nullable()
                 ->constrained('tasks')
