@@ -45,6 +45,9 @@ class HandleReadFileJob extends AJob
             $cb_show("Reading {$this->data->name} information start");
 
             $extent = $this->getExtent($this->data->dxf_path);
+            if ($extent[0] >= $extent[2] || $extent[1] >= $extent[3]) {
+                throw new \Exception("Invalid bounding box!! Please change Coordinate Reference System");
+            }
             $cb_show("Reading bounding box done");
 
             $layers = $this->getLayers($this->data->dxf_path);

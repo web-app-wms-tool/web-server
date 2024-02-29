@@ -24,7 +24,7 @@ Route::group([], function () {
 
     Route::post('uploaded-file-list', [UploadedFileController::class, 'indexAgGrid']);
     Route::apiResource('uploaded-files', UploadedFileController::class)->only(['store', 'destroy']);
-    Route::post('uploaded-file-list/{id}/convert', [UploadedFileController::class, 'convert']);
+    Route::post('uploaded-file/{id}/convert', [UploadedFileController::class, 'convert']);
 
     Route::post('task-list', [TaskController::class, 'indexAgGrid']);
 });
