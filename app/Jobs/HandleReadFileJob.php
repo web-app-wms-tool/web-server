@@ -3,13 +3,11 @@
 namespace App\Jobs;
 
 use App\Constants\Srs;
+use App\Helpers\SrsHelper;
 use App\Models\Task;
 use App\Models\UploadedFile;
 use File;
 use Process;
-use proj4php\Point;
-use proj4php\Proj4php;
-use proj4php\Proj;
 use Storage;
 
 class HandleReadFileJob extends AJob
@@ -60,27 +58,17 @@ class HandleReadFileJob extends AJob
             $srs_default = Srs::DEFAULT;
             if ($this->data->srs != $srs_default) {
                 $cb_show("Convert bounding box's in {$this->data->srs} to $srs_default start");
-
-                $proj4 = new Proj4php();
-
-                $s_proj4 = new Proj($this->data->srs, $proj4);
-                $t_proj4 = new Proj($srs_default, $proj4);
-
-                $s_min_point = new Point($extent[0], $extent[1], $s_proj4);
-                $t_min_point = $proj4->transform($t_proj4, $s_min_point);
-
-                $s_max_point = new Point($extent[2], $extent[3], $s_proj4);
-                $t_max_point = $proj4->transform($t_proj4, $s_max_point);
-
+                $t_min_point = SrsHelper::transformCoordinate($this->data->srs, $srs_default, $extent[0], $extent[1]);
+                $t_max_point = SrsHelper::transformCoordinate($this->data->srs, $srs_default, $extent[2], $extent[3]);
                 $cb_show("Convert bounding box's in {$this->data->srs} to $srs_default done");
             }
 
             $this->data->metadata = [
                 "bbox" => [
-                    $t_min_point->x ?? $extent[0],
-                    $t_min_point->y ?? $extent[1],
-                    $t_max_point->x ?? $extent[2],
-                    $t_max_point->y ?? $extent[3],
+                    $t_min_point[0] ?? $extent[0],
+                    $t_min_point[1] ?? $extent[1],
+                    $t_max_point[0] ?? $extent[2],
+                    $t_max_point[1] ?? $extent[3],
                     "srs" => $srs_default,
                 ],
                 'layers' => $layers,

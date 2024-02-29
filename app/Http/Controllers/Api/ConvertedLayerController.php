@@ -19,7 +19,7 @@ class ConvertedLayerController extends Controller
         $query = ConvertedLayer::query();
         $query = QueryBuilder::for($query, $request)
             ->allowedAgGrid([])
-            ->defaultSorts(['id', 'created_at'])
+            ->defaultSorts(['-id'])
             ->allowedPagination();
         return response()->json(new \App\Http\Resources\Items($query->get()), 200, []);
     }
