@@ -11,10 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('converted_files', function (Blueprint $table) {
+        Schema::create('converted_layers', function (Blueprint $table) {
             $table->id();
             $table->string('layer_name');
             $table->string('geoserver_ref');
+            $table->string('srs');
+            $table->json('metadata')->nullable()->default('{}');
             $table->string('uuid')->unique();
             $table->foreignId('task_id')
                 ->nullable()
@@ -33,6 +35,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('converted_files');
+        Schema::dropIfExists('converted_layers');
     }
 };

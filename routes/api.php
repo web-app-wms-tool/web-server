@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\Api\ConvertedFileController;
+use App\Http\Controllers\Api\ConvertedLayerController;
 use App\Http\Controllers\Api\SrsController;
 use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\UploadedFileController;
@@ -20,7 +20,7 @@ use Illuminate\Support\Facades\Route;
 Route::group([], function () {
     Route::get("srs", [SrsController::class, 'index']);
 
-    Route::post('converted-file-list', [ConvertedFileController::class, 'indexAgGrid']);
+    Route::post('converted-layer-list', [ConvertedLayerController::class, 'indexAgGrid']);
 
     Route::post('uploaded-file-list', [UploadedFileController::class, 'indexAgGrid']);
     Route::apiResource('uploaded-files', UploadedFileController::class)->only(['store', 'destroy']);

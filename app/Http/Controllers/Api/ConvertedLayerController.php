@@ -4,11 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Library\QueryBuilder\QueryBuilder;
-use App\Models\ConvertedFile;
+use App\Models\ConvertedLayer;
 use App\Traits\ResponseType;
 use Illuminate\Http\Request;
 
-class ConvertedFileController extends Controller
+class ConvertedLayerController extends Controller
 {
     use ResponseType;
     /**
@@ -16,20 +16,12 @@ class ConvertedFileController extends Controller
      */
     public function indexAgGrid(Request $request)
     {
-        $query = ConvertedFile::query();
+        $query = ConvertedLayer::query();
         $query = QueryBuilder::for($query, $request)
             ->allowedAgGrid([])
             ->defaultSorts(['id', 'created_at'])
             ->allowedPagination();
         return response()->json(new \App\Http\Resources\Items($query->get()), 200, []);
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        //
     }
 
     /**

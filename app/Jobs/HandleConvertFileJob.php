@@ -2,13 +2,17 @@
 
 namespace App\Jobs;
 
-use App\Models\ConvertedFile;
+use App\Constants\Srs;
+use App\Models\ConvertedLayer;
 use App\Models\Task;
 use App\Models\UploadedFile;
 use App\Traits\GeoserverTrait;
 use App\Traits\Uuid;
 use DB;
 use Process;
+use proj4php\Point;
+use proj4php\Proj4php;
+use proj4php\Proj;
 
 class HandleConvertFileJob extends AJob
 {
@@ -97,6 +101,24 @@ class HandleConvertFileJob extends AJob
             $where .= "\"";
             $cmd .= " " . $where;
             $cmd .= " -s_srs {$this->data->srs} -t_srs {$this->options['srs']}";
+
+            if ($this->options['srs'] != Srs::DEFAULT) {
+                $proj4 = new Proj4php();
+                $s_proj4 = new Proj(Srs::DEFAULT, $proj4);
+                $t_proj4 = new Proj($this->options['srs'], $proj4);
+                $s_min_point = new Point($this->options['min_x'], $this->options['min_y'], $s_proj4);
+                $t_min_point = $proj4->transform($t_proj4, $s_min_point);
+                $s_max_point = new Point($this->options['max_x'], $this->options['max_y'], $s_proj4);
+                $t_max_point = $proj4->transform($t_proj4, $s_max_point);
+            }
+
+            $min_x = $t_min_point->x ?? $this->options['min_x'];
+            $min_y = $t_min_point->y ?? $this->options['min_y'];
+            $max_x = $t_max_point->x ?? $this->options['max_x'];
+            $max_y = $t_max_point->y ?? $this->options['max_y'];
+            $cmd .= " -clipdst";
+            $cmd .= " " . $min_x . " " . $min_y;
+            $cmd .= " " . $max_x . " " . $max_y;
             $cmd .= " -f \"PostgreSQL\" PG:\"host=$host port=$port user=$username password=$password dbname=$db_name\"";
             $cmd .= " -lco SCHEMA=\"import\" -nln $uuid -append";
             $cmd .= " {$this->data->dxf_path}";
@@ -113,14 +135,37 @@ class HandleConvertFileJob extends AJob
 
             $cb_show("Publish layer {$db_name}:{$uuid} start");
             $url_featuretypes = "workspaces/$workspace_name/datastores/$schema/featuretypes";
-            $response = $this->postGeoserverData($url_featuretypes, ['featureType' => ['name' => $uuid]]);
+            $response = $this->postGeoserverData($url_featuretypes, [
+                'featureType' => [
+                    'name' => $uuid,
+                    "srs" => $this->options['srs'],
+                    "nativeBoundingBox" => [
+                        "minx" => $t_min_point->x ?? $this->options['min_x'],
+                        "miny" => $t_min_point->y ?? $this->options['min_y'],
+                        "maxx" => $t_max_point->x ?? $this->options['max_x'],
+                        "maxy" => $t_max_point->y ?? $this->options['max_y'],
+                        "crs" => $this->options['srs'],
+                    ],
+                ],
+            ]
+            );
             $cb_show("Publish layer {$db_name}:{$uuid} done");
 
-            ConvertedFile::create([
+            ConvertedLayer::create([
                 'layer_name' => "$db_name:$uuid",
+                'srs' => $this->options['srs'],
                 'geoserver_ref' => '',
                 'uuid' => $uuid,
                 'task_id' => $this->task->id,
+                'metadata' => [
+                    'bbox' => [
+                        $t_min_point->x ?? $this->options['min_x'],
+                        $t_min_point->y ?? $this->options['min_y'],
+                        $t_max_point->x ?? $this->options['max_x'],
+                        $t_max_point->y ?? $this->options['max_y'],
+                        "srs" => $this->options['srs'],
+                    ],
+                ],
             ]);
             $cb_show("Import {$this->data->name} into GeoServer as Postgis Database done");
         });
@@ -132,7 +177,7 @@ class HandleConvertFileJob extends AJob
         $uuid = $this->uuid;
         $this->cb_failed($exception, function ($cb_show) use ($schema, $uuid) {
             DB::statement("DROP TABLE IF EXISTS \"$schema\".\"$uuid\" CASCADE;");
-            $converted_file = ConvertedFile::where('uuid', $uuid)->first();
+            $converted_file = ConvertedLayer::where('uuid', $uuid)->first();
             if (!empty($converted_file)) {
                 $converted_file->delete();
             }
