@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Constants\OutputType;
 use App\Http\Controllers\Controller;
 use App\Library\QueryBuilder\QueryBuilder;
 use App\Models\ConvertedLayer;
@@ -24,20 +25,23 @@ class ConvertedLayerController extends Controller
         return response()->json(new \App\Http\Resources\Items($query->get()), 200, []);
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
+    public function download(Request $request, string $id)
     {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
-    {
-        //
+        $data = ConvertedLayer::findOrFail($id);
+        $request->validate([
+            'output_type' => 'required',
+        ]);
+        $base_url = config('app.geoserver.uri') . "/wfs?request=GetFeature&service=WFS&version=1.0.0&typeName={$data->layer_name}";
+        if ($request->get('output_type') == OutputType::GEOJSON) {
+            $url = $base_url . "&outputFormat=application%2Fjson";
+        } elseif ($request->get('output_type') == OutputType::KML) {
+            $url = $base_url . "&outputFormat=application/vnd.google-earth.kml+xml";
+        } else if ($request->get('output_type') == OutputType::SHAPEFILE) {
+            $url = $base_url . "&outputFormat=SHAPE-ZIP";
+        } else {
+            abort(500, "Output Format is invalid");
+        }
+        return $url;
     }
 
     /**

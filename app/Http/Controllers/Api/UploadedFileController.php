@@ -24,6 +24,7 @@ class UploadedFileController extends Controller
     public function indexAgGrid(Request $request)
     {
         $query = UploadedFile::query();
+        $query->where('is_read_done', 1);
         $query = QueryBuilder::for($query, $request)
             ->allowedAgGrid([])
             ->defaultSorts(['-id'])

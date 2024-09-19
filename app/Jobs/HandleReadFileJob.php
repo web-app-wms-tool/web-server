@@ -85,7 +85,16 @@ class HandleReadFileJob extends AJob
 
     public function failed(\Exception $exception)
     {
-        $this->cb_failed($exception);
+        $data = $this->data;
+        $this->cb_failed($exception, function ($cb_show) use ($data) {
+            if (File::exists($data->path)) {
+                File::delete($data->path);
+            }
+            if (!empty($data->dxf_path) && File::exists($data->dxf_path)) {
+                File::delete($data->dxf_path);
+            }
+            $data->delete();
+        });
     }
 
     private function getExtent(string $file_path): array

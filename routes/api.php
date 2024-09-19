@@ -21,10 +21,11 @@ Route::group([], function () {
     Route::get("srs", [SrsController::class, 'index']);
 
     Route::post('converted-layer-list', [ConvertedLayerController::class, 'indexAgGrid']);
+    Route::post('converted-layers/{id}/download', [ConvertedLayerController::class, 'download']);
 
     Route::post('uploaded-file-list', [UploadedFileController::class, 'indexAgGrid']);
     Route::apiResource('uploaded-files', UploadedFileController::class)->only(['store', 'destroy']);
-    Route::post('uploaded-file/{id}/convert', [UploadedFileController::class, 'convert']);
+    Route::post('uploaded-files/{id}/convert', [UploadedFileController::class, 'convert']);
 
     Route::post('task-list', [TaskController::class, 'indexAgGrid']);
 });
